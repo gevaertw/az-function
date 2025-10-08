@@ -141,7 +141,7 @@ try
     var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
     
     // Create the file
-    var fileName = $"resource-providers-{targetRegion}.json";
+    var fileName = "resource-providers.json";
     var blobClient = containerClient.GetBlobClient(fileName);
     
     using (var stream = new MemoryStream(contentBytes))
@@ -770,7 +770,7 @@ static async Task CreateResourcesPage(BlobContainerClient containerClient, strin
                     </a>
                 </li>
                 <li class=""nav-item"">
-                    <a href=""resource-providers-{targetRegion}.json"" class=""nav-link"" data-page=""json"">
+                    <a href=""resource-providers.json"" class=""nav-link"" data-page=""json"">
                         <span class=""nav-icon"">📄</span>
                         <span class=""nav-text"">Raw JSON</span>
                     </a>
