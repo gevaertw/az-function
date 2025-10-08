@@ -1097,7 +1097,27 @@ static async Task<List<object>> CollectVmSkuData(SubscriptionResource subscripti
         Console.WriteLine($"⚠️ Error collecting VM SKU data: {ex.Message}");
     }
     
-    return vmSkus.OrderBy(s => ((dynamic)s).name).ToList();
+    // Order by family first, then by CPU count (extracted from capabilities)
+    return vmSkus.OrderBy(s => {
+        var sku = (dynamic)s;
+        return sku.family?.ToString() ?? "Unknown";
+    }).ThenBy(s => {
+        var sku = (dynamic)s;
+        // Extract vCPU count from capabilities for sorting
+        if (sku.capabilities != null)
+        {
+            foreach (var cap in sku.capabilities)
+            {
+                var capDynamic = (dynamic)cap;
+                if (capDynamic.name?.ToString() == "vCPUs")
+                {
+                    if (int.TryParse(capDynamic.value?.ToString(), out int vcpuCount))
+                        return vcpuCount;
+                }
+            }
+        }
+        return 0; // Default if no vCPU count found
+    }).ThenBy(s => ((dynamic)s).name).ToList();
 }
 
 // Helper method to upload VM SKU JSON data
@@ -1273,15 +1293,16 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
             }
         }
         
+        // Format capabilities for better readability with line breaks
         var capabilitiesText = allCapabilities.Any() ? 
-            string.Join(", ", allCapabilities) : "No capabilities available";
+            string.Join("<br/>", allCapabilities) : "No capabilities available";
         
         vmSkusHtml += $@"
                     <tr data-availability=""{availabilityClass}"">
                         <td><strong>{skuName}</strong></td>
                         <td>{family}</td>
                         <td>{size}</td>
-                        <td><small>{capabilitiesText}</small></td>
+                        <td><small style=""line-height: 1.4;"">{capabilitiesText}</small></td>
                         <td><span class=""status-badge {availabilityClass}"">{availabilityStatus}</span></td>
                     </tr>";
     }
