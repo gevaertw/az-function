@@ -1,13 +1,12 @@
-using Azure.Core;
 using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Resources;
 using Azure.ResourceManager.Compute;
 using Azure.Storage.Blobs;
-using System.Diagnostics;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http;
+using Azure.Core;
 
 // ResourceChecker - Azure Container App that queries resource providers and availability zones
 // Uses managed identity for secure authentication to Azure Storage and Resource Manager
@@ -932,7 +931,7 @@ static async Task CreateResourcesPage(BlobContainerClient containerClient, strin
     Console.WriteLine("✅ Successfully uploaded 'resources.html'");
 }
 
-// Helper method to collect VM SKU data for the target region using REST API
+// Helper method to collect VM SKU data for the target region using Azure REST API
 static async Task<List<object>> CollectVmSkuData(SubscriptionResource subscription, string targetRegion)
 {
     var vmSkus = new List<object>();
@@ -944,130 +943,154 @@ static async Task<List<object>> CollectVmSkuData(SubscriptionResource subscripti
         // Get access token using managed identity
         var accessToken = await GetAccessToken();
         
-        // Use REST API to get VM SKU data
+        // Use REST API to get VM SKU data with retry logic for rate limiting
         using var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        httpClient.Timeout = TimeSpan.FromMinutes(5); // Increase timeout for large responses
         
         var subscriptionId = subscription.Id.SubscriptionId;
         var requestUrl = $"https://management.azure.com/subscriptions/{subscriptionId}/providers/Microsoft.Compute/skus?api-version=2021-07-01&$filter=location eq '{targetRegion}'";
         
         Console.WriteLine($"📡 Making REST API call to: {requestUrl}");
         
-        var response = await httpClient.GetAsync(requestUrl);
-        if (!response.IsSuccessStatusCode)
-        {
-            Console.WriteLine($"❌ API request failed: {response.StatusCode} - {response.ReasonPhrase}");
-            var errorContent = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"Error details: {errorContent}");
-            return vmSkus;
-        }
+        // Implement retry logic for rate limiting
+        var maxRetries = 3;
+        var baseDelay = TimeSpan.FromSeconds(2);
         
-        var jsonContent = await response.Content.ReadAsStringAsync();
-        Console.WriteLine($"📊 API returned {jsonContent.Length} characters of data");
-        
-        // Parse the JSON response
-        using var document = JsonDocument.Parse(jsonContent);
-        var valueProperty = document.RootElement.GetProperty("value");
-
-        foreach (var skuElement in valueProperty.EnumerateArray())
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            if (!skuElement.TryGetProperty("name", out var nameProperty))
-                continue;
-
-            var skuName = nameProperty.GetString();
-            if (string.IsNullOrEmpty(skuName))
-                continue;
-            
-            // Filter for virtual machine SKUs only
-            if (!skuElement.TryGetProperty("resourceType", out var resourceTypeProperty) ||
-                resourceTypeProperty.GetString() != "virtualMachines")
-                continue;
-
-            // Extract family from SKU name (e.g., "Standard_D2s_v5" -> family="Dsv5", size="D2s_v5")
-            var family = ExtractVmFamily(skuName);
-            var size = skuName.StartsWith("Standard_") ? skuName.Substring(9) : skuName;
-
-            // Get capabilities
-            var capabilities = new List<object>();
-            var vcpus = "Unknown";
-            var memoryGB = "Unknown";
-            
-            if (skuElement.TryGetProperty("capabilities", out var capabilitiesArray))
+            try
             {
-                foreach (var capability in capabilitiesArray.EnumerateArray())
+                var response = await httpClient.GetAsync(requestUrl);
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
-                    if (capability.TryGetProperty("name", out var capName) && 
-                        capability.TryGetProperty("value", out var capValue))
+                    if (attempt < maxRetries)
                     {
-                        var capNameStr = capName.GetString();
-                        var capValueStr = capValue.GetString();
-                        
-                        capabilities.Add(new { name = capNameStr, value = capValueStr });
-                        
-                        // Extract specific values for display
-                        if (capNameStr == "vCPUs")
-                            vcpus = capValueStr;
-                        else if (capNameStr == "MemoryGB")
-                            memoryGB = capValueStr;
+                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt) * baseDelay.TotalSeconds);
+                        Console.WriteLine($"⏳ Rate limited, waiting {delay.TotalSeconds} seconds before retry {attempt + 1}/{maxRetries}");
+                        await Task.Delay(delay);
+                        continue;
                     }
+                    throw new HttpRequestException($"API rate limit exceeded after {maxRetries} attempts");
                 }
-            }
-
-            // Get availability zones
-            var availableZones = new List<string>();
-            if (skuElement.TryGetProperty("locationInfo", out var locationInfoArray))
-            {
-                foreach (var locationInfo in locationInfoArray.EnumerateArray())
+                
+                if (!response.IsSuccessStatusCode)
                 {
-                    if (locationInfo.TryGetProperty("zones", out var zonesArray))
+                    Console.WriteLine($"❌ API request failed: {response.StatusCode} - {response.ReasonPhrase}");
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"Error details: {errorContent}");
+                    return vmSkus;
+                }
+                
+                var jsonContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"📊 API returned {jsonContent.Length} characters of data");
+                
+                // Parse the JSON response
+                using var document = JsonDocument.Parse(jsonContent);
+                var valueProperty = document.RootElement.GetProperty("value");
+
+                foreach (var skuElement in valueProperty.EnumerateArray())
+                {
+                    if (!skuElement.TryGetProperty("name", out var nameProperty))
+                        continue;
+
+                    var skuName = nameProperty.GetString();
+                    if (string.IsNullOrEmpty(skuName))
+                        continue;
+                    
+                    // Filter for virtual machine SKUs only
+                    if (!skuElement.TryGetProperty("resourceType", out var resourceTypeProperty) ||
+                        resourceTypeProperty.GetString() != "virtualMachines")
+                        continue;
+
+                    // Extract family from SKU name (e.g., "Standard_D2s_v5" -> family="Dsv5", size="D2s_v5")
+                    var family = ExtractVmFamily(skuName);
+                    var size = skuName.StartsWith("Standard_") ? skuName.Substring(9) : skuName;
+
+                    // Get ALL capabilities from the API
+                    var capabilities = new List<object>();
+                    var vcpus = "Unknown";
+                    var memoryGB = "Unknown";
+                    
+                    if (skuElement.TryGetProperty("capabilities", out var capabilitiesArray))
                     {
-                        foreach (var zone in zonesArray.EnumerateArray())
+                        foreach (var capability in capabilitiesArray.EnumerateArray())
                         {
-                            var zoneStr = zone.GetString();
-                            if (!string.IsNullOrEmpty(zoneStr))
-                                availableZones.Add(zoneStr);
+                            if (capability.TryGetProperty("name", out var capName) && 
+                                capability.TryGetProperty("value", out var capValue))
+                            {
+                                var capNameStr = capName.GetString();
+                                var capValueStr = capValue.GetString();
+                                
+                                capabilities.Add(new { name = capNameStr, value = capValueStr });
+                                
+                                // Extract specific values for display
+                                if (capNameStr == "vCPUs")
+                                    vcpus = capValueStr;
+                                else if (capNameStr == "MemoryGB")
+                                    memoryGB = capValueStr;
+                            }
                         }
                     }
+
+                    // Get availability zones
+                    var availableZones = new List<string>();
+                    if (skuElement.TryGetProperty("locationInfo", out var locationInfoArray))
+                    {
+                        foreach (var locationInfo in locationInfoArray.EnumerateArray())
+                        {
+                            if (locationInfo.TryGetProperty("location", out var loc) && 
+                                loc.GetString()?.Equals(targetRegion, StringComparison.OrdinalIgnoreCase) == true &&
+                                locationInfo.TryGetProperty("zones", out var zonesArray))
+                            {
+                                foreach (var zone in zonesArray.EnumerateArray())
+                                {
+                                    var zoneStr = zone.GetString();
+                                    if (!string.IsNullOrEmpty(zoneStr))
+                                        availableZones.Add(zoneStr);
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Determine availability status
+                    string availabilityStatus;
+                    if (availableZones.Count == 0)
+                    {
+                        availabilityStatus = "Available (No Zone Info)";
+                    }
+                    else if (availableZones.Count >= 3)
+                    {
+                        availabilityStatus = "Available In All Zones";
+                    }
+                    else
+                    {
+                        availabilityStatus = $"Available In {availableZones.Count} Zone(s)";
+                    }
+
+                    vmSkus.Add(new
+                    {
+                        name = skuName,
+                        family = family,
+                        size = size,
+                        tier = "Standard",
+                        capabilities = capabilities,
+                        availabilityStatus = availabilityStatus,
+                        availableZones = availableZones,
+                        locations = new List<string> { targetRegion }
+                    });
                 }
+                
+                Console.WriteLine($"✅ Successfully collected {vmSkus.Count} actual VM SKUs from {targetRegion}");
+                break; // Success, exit retry loop
             }
-
-            // Create capabilities list for the expected format
-            var capabilitiesList = new List<object>
+            catch (HttpRequestException) when (attempt < maxRetries)
             {
-                new { name = "vCPUs", value = vcpus },
-                new { name = "MemoryGB", value = memoryGB },
-                new { name = "PremiumIO", value = family.Contains("s") ? "True" : "False" }
-            };
-            
-            // Determine availability status based on zones
-            string availabilityStatus;
-            if (availableZones.Count == 0)
-            {
-                availabilityStatus = "Not Available";
+                // Will retry
             }
-            else if (availableZones.Count >= 3)
-            {
-                availabilityStatus = "Available In All Zones";
-            }
-            else
-            {
-                availabilityStatus = $"Available In {availableZones.Count} Zone{(availableZones.Count > 1 ? "s" : "")}";
-            }
-
-            vmSkus.Add(new
-            {
-                name = skuName,
-                family = family,
-                size = size,
-                tier = "Standard",
-                capabilities = capabilitiesList,
-                availabilityStatus = availabilityStatus,
-                availableZones = availableZones,
-                locations = new List<string> { targetRegion }
-            });
         }
-
-        Console.WriteLine($"✅ Successfully collected {vmSkus.Count} actual VM SKUs from {targetRegion}");
     }
     catch (Exception ex)
     {
@@ -1347,79 +1370,41 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
     Console.WriteLine("✅ Successfully uploaded 'vm-skus.html'");
 }
 
-// Helper method to extract VM family from SKU name
-static string ExtractVmFamily(string skuName)
-{
-    if (string.IsNullOrEmpty(skuName) || !skuName.StartsWith("Standard_"))
-        return "Unknown";
-        
-    var sizePart = skuName.Substring(9); // Remove "Standard_" prefix
-    
-    // Extract family based on common Azure VM naming patterns
-    if (sizePart.StartsWith("A") && sizePart.Contains("_v"))
-        return "Av" + sizePart.Split('_')[1]; // e.g., A1_v2 -> Av2
-    else if (sizePart.StartsWith("B"))
-        return "Bs"; // B-series (burstable)
-    else if (sizePart.StartsWith("D") && sizePart.Contains("s_v"))
-        return "Dsv" + sizePart.Split('_')[1].Substring(1); // e.g., D2s_v5 -> Dsv5
-    else if (sizePart.StartsWith("D") && sizePart.Contains("_v"))
-        return "Dv" + sizePart.Split('_')[1].Substring(1); // e.g., D2_v5 -> Dv5
-    else if (sizePart.StartsWith("E") && sizePart.Contains("s_v"))
-        return "Esv" + sizePart.Split('_')[1].Substring(1); // e.g., E2s_v5 -> Esv5
-    else if (sizePart.StartsWith("F") && sizePart.Contains("s_v"))
-        return "Fsv" + sizePart.Split('_')[1].Substring(1); // e.g., F2s_v2 -> Fsv2
-    else if (sizePart.StartsWith("G"))
-        return "G"; // G-series
-    else if (sizePart.StartsWith("H"))
-        return sizePart.Length > 1 && char.IsUpper(sizePart[1]) ? sizePart.Substring(0, 2) : "H"; // HB, HC, etc.
-    else if (sizePart.StartsWith("L"))
-        return "L"; // L-series
-    else if (sizePart.StartsWith("M"))
-        return "M"; // M-series
-    else if (sizePart.StartsWith("N"))
-    {
-        // Handle GPU families like NC, ND, NV
-        if (sizePart.Length > 1 && char.IsUpper(sizePart[1]))
-        {
-            if (sizePart.Contains("s_v"))
-                return sizePart.Substring(0, 2) + "sv" + sizePart.Split('_')[1].Substring(1);
-            else if (sizePart.Contains("_v"))
-                return sizePart.Substring(0, 2) + "v" + sizePart.Split('_')[1].Substring(1);
-            else
-                return sizePart.Substring(0, 2);
-        }
-        return "N";
-    }
-    else if (sizePart.Contains("pds_v"))
-        return sizePart.Substring(0, sizePart.IndexOf("pds")) + "pdsv" + sizePart.Split('_')[1].Substring(1); // ARM Dpdsv5
-    else if (sizePart.Contains("ps_v"))
-        return sizePart.Substring(0, sizePart.IndexOf("ps")) + "psv" + sizePart.Split('_')[1].Substring(1); // ARM Dpsv5
-    
-    // Fallback: try to extract the first letter(s) and version
-    var parts = sizePart.Split('_');
-    if (parts.Length > 1 && parts[1].StartsWith("v"))
-        return parts[0].TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9') + parts[1];
-    
-    // Final fallback: return first character
-    return sizePart.Substring(0, 1);
-}
-
 // Helper method to get access token using managed identity
 static async Task<string> GetAccessToken()
 {
-    try
+    Console.WriteLine("🔐 Getting access token using managed identity...");
+    var credential = new DefaultAzureCredential();
+    var tokenRequestContext = new TokenRequestContext(new[] { "https://management.azure.com/.default" });
+    var token = await credential.GetTokenAsync(tokenRequestContext);
+    Console.WriteLine("✅ Successfully obtained access token using managed identity");
+    return token.Token;
+}
+
+// Helper method to extract VM family from SKU name
+static string ExtractVmFamily(string skuName)
+{
+    if (string.IsNullOrEmpty(skuName))
+        return "Unknown";
+    
+    // Handle Standard_ prefix
+    var name = skuName.StartsWith("Standard_") ? skuName.Substring(9) : skuName;
+    
+    // Extract family patterns (e.g., "D2s_v5" -> "Dsv5", "B1ms" -> "B")
+    if (name.Contains("_v"))
     {
-        Console.WriteLine("🔐 Getting access token using managed identity...");
-        
-        var credential = new DefaultAzureCredential();
-        var tokenResult = await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "https://management.azure.com/.default" }));
-        
-        Console.WriteLine("✅ Successfully obtained access token using managed identity");
-        return tokenResult.Token;
+        var parts = name.Split('_');
+        if (parts.Length >= 2)
+        {
+            var basePart = parts[0]; // e.g., "D2s"
+            var versionPart = parts[1]; // e.g., "v5"
+            
+            // Extract letters and 's' from base part
+            var family = new string(basePart.Where(c => char.IsLetter(c)).ToArray());
+            return family + versionPart;
+        }
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"❌ Failed to get access token: {ex.Message}");
-        throw;
-    }
+    
+    // For names without version (e.g., "B1ms")
+    return new string(name.Where(c => char.IsLetter(c)).ToArray());
 }
