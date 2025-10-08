@@ -1,7 +1,11 @@
+using Azure.Core;
 using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.Resources;
+using Azure.ResourceManager.Compute;
 using Azure.Storage.Blobs;
+using System.Diagnostics;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 
@@ -122,6 +126,11 @@ try
 
     Console.WriteLine($"📊 Found {((List<object>)resourceProviderData.resourceProviders).Count} resource providers with resources in {targetRegion}");
 
+    // Collect VM SKU information
+    Console.WriteLine("🖥️ Collecting VM SKU information...");
+    var vmSkuData = await CollectVmSkuData(subscription, targetRegion);
+    Console.WriteLine($"💻 Found {vmSkuData.Count} VM SKUs in {targetRegion}");
+
     // Convert to JSON
     var jsonOptions = new JsonSerializerOptions 
     { 
@@ -158,6 +167,9 @@ try
     Console.WriteLine($"✅ Successfully uploaded '{fileName}' to storage account '{storageAccountName}'");
     Console.WriteLine($"📍 Blob URL: {blobClient.Uri}");
     
+    // Upload VM SKU JSON data
+    await UploadVmSkuJson(containerClient, vmSkuData, targetRegion);
+    
     // Upload CSS file
     Console.WriteLine("🎨 Uploading CSS styles...");
     await UploadCssFile(containerClient);
@@ -169,6 +181,10 @@ try
     // Create resources.html file with resource provider table
     Console.WriteLine("📊 Generating resources.html...");
     await CreateResourcesPage(containerClient, targetRegion, resourceProviderData);
+    
+    // Create vm-skus.html file with VM SKU table
+    Console.WriteLine("💻 Generating vm-skus.html...");
+    await CreateVmSkusPage(containerClient, targetRegion, vmSkuData);
 
     Console.WriteLine($"✅ Successfully uploaded all HTML files to storage account '{storageAccountName}'");
     Console.WriteLine($"🌐 Static website URL: https://{storageAccountName}.z1.web.core.windows.net/");
@@ -611,8 +627,14 @@ static async Task CreateIndexPage(BlobContainerClient containerClient, string ta
                 </li>
                 <li class=""nav-item"">
                     <a href=""resources.html"" class=""nav-link"" data-page=""resources"">
-                        <span class=""nav-icon"">🏢</span>
+                        <span class=""nav-icon"">📦</span>
                         <span class=""nav-text"">Resource Providers</span>
+                    </a>
+                </li>
+                <li class=""nav-item"">
+                    <a href=""vm-skus.html"" class=""nav-link"" data-page=""vm-skus"">
+                        <span class=""nav-icon"">💻</span>
+                        <span class=""nav-text"">VM SKUs</span>
                     </a>
                 </li>
                 <li class=""nav-item"">
@@ -633,11 +655,20 @@ static async Task CreateIndexPage(BlobContainerClient containerClient, string ta
 
         <div class=""features-grid"">
             <a href=""resources.html"" class=""feature-card"">
-                <span class=""feature-icon"">🏢</span>
+                <span class=""feature-icon"">📦</span>
                 <h2 class=""feature-title"">Resource Providers</h2>
                 <p class=""feature-description"">
                     Browse {providerCount} registered resource providers 
                     and their availability in {targetRegion}. View detailed resource types and availability zones.
+                </p>
+            </a>
+            
+            <a href=""vm-skus.html"" class=""feature-card"">
+                <span class=""feature-icon"">💻</span>
+                <h2 class=""feature-title"">VM SKUs</h2>
+                <p class=""feature-description"">
+                    Explore available virtual machine SKUs in {targetRegion}. 
+                    View capabilities, families, and availability zone support for each VM size.
                 </p>
             </a>
 
@@ -765,8 +796,14 @@ static async Task CreateResourcesPage(BlobContainerClient containerClient, strin
                 </li>
                 <li class=""nav-item"">
                     <a href=""resources.html"" class=""nav-link active"" data-page=""resources"">
-                        <span class=""nav-icon"">🏢</span>
+                        <span class=""nav-icon"">📦</span>
                         <span class=""nav-text"">Resource Providers</span>
+                    </a>
+                </li>
+                <li class=""nav-item"">
+                    <a href=""vm-skus.html"" class=""nav-link"" data-page=""vm-skus"">
+                        <span class=""nav-icon"">💻</span>
+                        <span class=""nav-text"">VM SKUs</span>
                     </a>
                 </li>
                 <li class=""nav-item"">
@@ -893,4 +930,497 @@ static async Task CreateResourcesPage(BlobContainerClient containerClient, strin
     }
     
     Console.WriteLine("✅ Successfully uploaded 'resources.html'");
+}
+
+// Helper method to collect VM SKU data for the target region using REST API
+static async Task<List<object>> CollectVmSkuData(SubscriptionResource subscription, string targetRegion)
+{
+    var vmSkus = new List<object>();
+    
+    try
+    {
+        Console.WriteLine($"🔍 Collecting actual VM SKU data from Azure region: {targetRegion}");
+        
+        // Get access token using managed identity
+        var accessToken = await GetAccessToken();
+        
+        // Use REST API to get VM SKU data
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        
+        var subscriptionId = subscription.Id.SubscriptionId;
+        var requestUrl = $"https://management.azure.com/subscriptions/{subscriptionId}/providers/Microsoft.Compute/skus?api-version=2021-07-01&$filter=location eq '{targetRegion}'";
+        
+        Console.WriteLine($"📡 Making REST API call to: {requestUrl}");
+        
+        var response = await httpClient.GetAsync(requestUrl);
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"❌ API request failed: {response.StatusCode} - {response.ReasonPhrase}");
+            var errorContent = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Error details: {errorContent}");
+            return vmSkus;
+        }
+        
+        var jsonContent = await response.Content.ReadAsStringAsync();
+        Console.WriteLine($"📊 API returned {jsonContent.Length} characters of data");
+        
+        // Parse the JSON response
+        using var document = JsonDocument.Parse(jsonContent);
+        var valueProperty = document.RootElement.GetProperty("value");
+
+        foreach (var skuElement in valueProperty.EnumerateArray())
+        {
+            if (!skuElement.TryGetProperty("name", out var nameProperty))
+                continue;
+
+            var skuName = nameProperty.GetString();
+            if (string.IsNullOrEmpty(skuName))
+                continue;
+            
+            // Filter for virtual machine SKUs only
+            if (!skuElement.TryGetProperty("resourceType", out var resourceTypeProperty) ||
+                resourceTypeProperty.GetString() != "virtualMachines")
+                continue;
+
+            // Extract family from SKU name (e.g., "Standard_D2s_v5" -> family="Dsv5", size="D2s_v5")
+            var family = ExtractVmFamily(skuName);
+            var size = skuName.StartsWith("Standard_") ? skuName.Substring(9) : skuName;
+
+            // Get capabilities
+            var capabilities = new List<object>();
+            var vcpus = "Unknown";
+            var memoryGB = "Unknown";
+            
+            if (skuElement.TryGetProperty("capabilities", out var capabilitiesArray))
+            {
+                foreach (var capability in capabilitiesArray.EnumerateArray())
+                {
+                    if (capability.TryGetProperty("name", out var capName) && 
+                        capability.TryGetProperty("value", out var capValue))
+                    {
+                        var capNameStr = capName.GetString();
+                        var capValueStr = capValue.GetString();
+                        
+                        capabilities.Add(new { name = capNameStr, value = capValueStr });
+                        
+                        // Extract specific values for display
+                        if (capNameStr == "vCPUs")
+                            vcpus = capValueStr;
+                        else if (capNameStr == "MemoryGB")
+                            memoryGB = capValueStr;
+                    }
+                }
+            }
+
+            // Get availability zones
+            var availableZones = new List<string>();
+            if (skuElement.TryGetProperty("locationInfo", out var locationInfoArray))
+            {
+                foreach (var locationInfo in locationInfoArray.EnumerateArray())
+                {
+                    if (locationInfo.TryGetProperty("zones", out var zonesArray))
+                    {
+                        foreach (var zone in zonesArray.EnumerateArray())
+                        {
+                            var zoneStr = zone.GetString();
+                            if (!string.IsNullOrEmpty(zoneStr))
+                                availableZones.Add(zoneStr);
+                        }
+                    }
+                }
+            }
+
+            // Create capabilities list for the expected format
+            var capabilitiesList = new List<object>
+            {
+                new { name = "vCPUs", value = vcpus },
+                new { name = "MemoryGB", value = memoryGB },
+                new { name = "PremiumIO", value = family.Contains("s") ? "True" : "False" }
+            };
+            
+            // Determine availability status based on zones
+            string availabilityStatus;
+            if (availableZones.Count == 0)
+            {
+                availabilityStatus = "Not Available";
+            }
+            else if (availableZones.Count >= 3)
+            {
+                availabilityStatus = "Available In All Zones";
+            }
+            else
+            {
+                availabilityStatus = $"Available In {availableZones.Count} Zone{(availableZones.Count > 1 ? "s" : "")}";
+            }
+
+            vmSkus.Add(new
+            {
+                name = skuName,
+                family = family,
+                size = size,
+                tier = "Standard",
+                capabilities = capabilitiesList,
+                availabilityStatus = availabilityStatus,
+                availableZones = availableZones,
+                locations = new List<string> { targetRegion }
+            });
+        }
+
+        Console.WriteLine($"✅ Successfully collected {vmSkus.Count} actual VM SKUs from {targetRegion}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ Error collecting VM SKU data: {ex.Message}");
+    }
+    
+    return vmSkus.OrderBy(s => ((dynamic)s).name).ToList();
+}
+
+// Helper method to upload VM SKU JSON data
+static async Task UploadVmSkuJson(BlobContainerClient containerClient, List<object> vmSkuData, string targetRegion)
+{
+    var vmSkuDocument = new
+    {
+        region = targetRegion,
+        generatedAt = DateTime.UtcNow,
+        vmSkuCount = vmSkuData.Count,
+        vmSkus = vmSkuData
+    };
+    
+    var jsonOptions = new JsonSerializerOptions 
+    { 
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+    
+    var jsonContent = JsonSerializer.Serialize(vmSkuDocument, jsonOptions);
+    var contentBytes = Encoding.UTF8.GetBytes(jsonContent);
+    
+    var fileName = "vm-skus.json";
+    var blobClient = containerClient.GetBlobClient(fileName);
+    
+    using (var stream = new MemoryStream(contentBytes))
+    {
+        await blobClient.UploadAsync(stream, overwrite: true);
+        
+        await blobClient.SetHttpHeadersAsync(new Azure.Storage.Blobs.Models.BlobHttpHeaders
+        {
+            ContentType = "application/json"
+        });
+    }
+
+    Console.WriteLine($"✅ Successfully uploaded '{fileName}' to storage account");
+    Console.WriteLine($"📍 VM SKU Blob URL: {blobClient.Uri}");
+}
+
+// Helper method to create vm-skus.html page
+static async Task CreateVmSkusPage(BlobContainerClient containerClient, string targetRegion, List<object> vmSkuData)
+{
+    var generatedTime = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm");
+    var totalSkus = vmSkuData.Count;
+    
+    // Count availability statistics
+    var availableSkus = vmSkuData.Count(s => 
+    {
+        var status = ((dynamic)s).availabilityStatus.ToString();
+        return status.Contains("Available") && !status.Contains("Not Available");
+    });
+    var notAvailableSkus = vmSkuData.Count(s => 
+        ((dynamic)s).availabilityStatus.ToString().Contains("Not Available"));
+    
+    var vmSkusHtml = $@"<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>VM SKUs - Azure Resource Dashboard</title>
+    <link href=""azure_unified_styles.css"" rel=""stylesheet"">
+</head>
+<body>
+    <nav class=""main-nav"">
+        <div class=""nav-container"">
+            <div class=""nav-brand"">
+                <a href=""index.html"" class=""nav-brand-link"">
+                    <span class=""nav-brand-text"">Azure Resource Dashboard</span>
+                </a>
+            </div>
+            <ul class=""nav-menu"">
+                <li class=""nav-item"">
+                    <a href=""index.html"" class=""nav-link"" data-page=""home"">
+                        <span class=""nav-icon"">🏠</span>
+                        <span class=""nav-text"">Home</span>
+                    </a>
+                </li>
+                <li class=""nav-item"">
+                    <a href=""resources.html"" class=""nav-link"" data-page=""resources"">
+                        <span class=""nav-icon"">📦</span>
+                        <span class=""nav-text"">Resource Providers</span>
+                    </a>
+                </li>
+                <li class=""nav-item"">
+                    <a href=""vm-skus.html"" class=""nav-link active"" data-page=""vm-skus"">
+                        <span class=""nav-icon"">💻</span>
+                        <span class=""nav-text"">VM SKUs</span>
+                    </a>
+                </li>
+                <li class=""nav-item"">
+                    <a href=""vm-skus.json"" class=""nav-link"" data-page=""json"">
+                        <span class=""nav-icon"">📄</span>
+                        <span class=""nav-text"">VM SKUs JSON</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    
+    <div class=""container"">
+        <h1>Azure VM SKUs</h1>
+        <p style=""color: #605e5c; font-size: 0.9rem; margin-bottom: 20px;"">
+            <strong>Region:</strong> {targetRegion} | 
+            <strong>Generated:</strong> {generatedTime} UTC |
+            <strong>Total SKUs:</strong> {totalSkus} |
+            <strong>Available:</strong> {availableSkus} |
+            <strong>Not Available:</strong> {notAvailableSkus}
+        </p>
+        
+        <div class=""search-container"">
+            <input type=""text"" id=""searchInput"" placeholder=""Search VM SKUs, capabilities, or availability..."">
+        </div>
+        
+        <div class=""filter-container"">
+            <div class=""filter-buttons"">
+                <button id=""filterAvailable"" class=""filter-btn"">Available In All Zones</button>
+                <button id=""filterPartialAvailable"" class=""filter-btn"">Available In Some Zones</button>
+                <button id=""filterNotAvailable"" class=""filter-btn"">Not Available</button>
+                <button id=""clearFilter"" class=""filter-btn clear-btn"">Clear Filter</button>
+            </div>
+        </div>
+        
+        <div class=""table-container"">
+            <table id=""vmSkuTable"" class=""resource-table"">
+                <thead>
+                    <tr>
+                        <th>VM SKU</th>
+                        <th>Family</th>
+                        <th>Size</th>
+                        <th>Key Capabilities</th>
+                        <th>Availability in {targetRegion}</th>
+                    </tr>
+                </thead>
+                <tbody>";
+
+    foreach (var sku in vmSkuData)
+    {
+        var skuDynamic = (dynamic)sku;
+        var skuName = skuDynamic.name?.ToString() ?? "";
+        var family = skuDynamic.family?.ToString() ?? "";
+        var size = skuDynamic.size?.ToString() ?? "";
+        var availabilityStatus = skuDynamic.availabilityStatus?.ToString() ?? "Not Available";
+        
+        // Determine availability class for styling
+        string availabilityClass;
+        if (availabilityStatus.Contains("Available In All Zones"))
+        {
+            availabilityClass = "available";
+        }
+        else if (availabilityStatus.Contains("Available") && !availabilityStatus.Contains("Not Available"))
+        {
+            availabilityClass = "partial-available";
+        }
+        else
+        {
+            availabilityClass = "not-available";
+        }
+        
+        // Extract key capabilities (vCPUs, Memory, Premium IO)
+        var keyCapabilities = new List<string>();
+        if (skuDynamic.capabilities != null)
+        {
+            foreach (var cap in skuDynamic.capabilities)
+            {
+                var capDynamic = (dynamic)cap;
+                var capName = capDynamic.name?.ToString() ?? "";
+                var capValue = capDynamic.value?.ToString() ?? "";
+                
+                if (capName.Contains("vCPUs") || capName.Contains("MemoryGB") || 
+                    capName.Contains("PremiumIO") || capName.Contains("MaxDataDiskCount"))
+                {
+                    keyCapabilities.Add($"{capName}: {capValue}");
+                }
+            }
+        }
+        
+        var capabilitiesText = keyCapabilities.Any() ? 
+            string.Join(", ", keyCapabilities.Take(3)) : "No key capabilities available";
+        
+        vmSkusHtml += $@"
+                    <tr data-availability=""{availabilityClass}"">
+                        <td><strong>{skuName}</strong></td>
+                        <td>{family}</td>
+                        <td>{size}</td>
+                        <td><small>{capabilitiesText}</small></td>
+                        <td><span class=""status-badge {availabilityClass}"">{availabilityStatus}</span></td>
+                    </tr>";
+    }
+
+    vmSkusHtml += @"
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('searchInput');
+        const table = document.getElementById('vmSkuTable');
+        const rows = table.querySelectorAll('tbody tr');
+        
+        // Filter functionality
+        const filterAvailable = document.getElementById('filterAvailable');
+        const filterPartialAvailable = document.getElementById('filterPartialAvailable');
+        const filterNotAvailable = document.getElementById('filterNotAvailable');
+        const clearFilter = document.getElementById('clearFilter');
+        
+        let currentFilter = null;
+        
+        function applyFiltersAndSearch() {
+            const searchTerm = searchInput.value.toLowerCase();
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                const matchesSearch = !searchTerm || text.includes(searchTerm);
+                const matchesFilter = !currentFilter || row.dataset.availability === currentFilter;
+                
+                row.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
+            });
+        }
+        
+        function clearFilters() {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            currentFilter = null;
+            searchInput.value = '';
+            applyFiltersAndSearch();
+        }
+        
+        function setFilter(filterType, buttonElement) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            buttonElement.classList.add('active');
+            currentFilter = filterType;
+            applyFiltersAndSearch();
+        }
+        
+        filterAvailable.addEventListener('click', function() {
+            setFilter('available', this);
+        });
+        
+        filterPartialAvailable.addEventListener('click', function() {
+            setFilter('partial-available', this);
+        });
+        
+        filterNotAvailable.addEventListener('click', function() {
+            setFilter('not-available', this);
+        });
+        
+        clearFilter.addEventListener('click', function() {
+            clearFilters();
+        });
+        
+        // Update search to work with filters
+        searchInput.addEventListener('input', applyFiltersAndSearch);
+    });
+    </script>
+</body>
+</html>";
+
+    var vmSkuBytes = Encoding.UTF8.GetBytes(vmSkusHtml);
+    var vmSkuBlobClient = containerClient.GetBlobClient("vm-skus.html");
+    
+    using (var vmSkuStream = new MemoryStream(vmSkuBytes))
+    {
+        await vmSkuBlobClient.UploadAsync(vmSkuStream, overwrite: true);
+        await vmSkuBlobClient.SetHttpHeadersAsync(new Azure.Storage.Blobs.Models.BlobHttpHeaders
+        {
+            ContentType = "text/html"
+        });
+    }
+    
+    Console.WriteLine("✅ Successfully uploaded 'vm-skus.html'");
+}
+
+// Helper method to extract VM family from SKU name
+static string ExtractVmFamily(string skuName)
+{
+    if (string.IsNullOrEmpty(skuName) || !skuName.StartsWith("Standard_"))
+        return "Unknown";
+        
+    var sizePart = skuName.Substring(9); // Remove "Standard_" prefix
+    
+    // Extract family based on common Azure VM naming patterns
+    if (sizePart.StartsWith("A") && sizePart.Contains("_v"))
+        return "Av" + sizePart.Split('_')[1]; // e.g., A1_v2 -> Av2
+    else if (sizePart.StartsWith("B"))
+        return "Bs"; // B-series (burstable)
+    else if (sizePart.StartsWith("D") && sizePart.Contains("s_v"))
+        return "Dsv" + sizePart.Split('_')[1].Substring(1); // e.g., D2s_v5 -> Dsv5
+    else if (sizePart.StartsWith("D") && sizePart.Contains("_v"))
+        return "Dv" + sizePart.Split('_')[1].Substring(1); // e.g., D2_v5 -> Dv5
+    else if (sizePart.StartsWith("E") && sizePart.Contains("s_v"))
+        return "Esv" + sizePart.Split('_')[1].Substring(1); // e.g., E2s_v5 -> Esv5
+    else if (sizePart.StartsWith("F") && sizePart.Contains("s_v"))
+        return "Fsv" + sizePart.Split('_')[1].Substring(1); // e.g., F2s_v2 -> Fsv2
+    else if (sizePart.StartsWith("G"))
+        return "G"; // G-series
+    else if (sizePart.StartsWith("H"))
+        return sizePart.Length > 1 && char.IsUpper(sizePart[1]) ? sizePart.Substring(0, 2) : "H"; // HB, HC, etc.
+    else if (sizePart.StartsWith("L"))
+        return "L"; // L-series
+    else if (sizePart.StartsWith("M"))
+        return "M"; // M-series
+    else if (sizePart.StartsWith("N"))
+    {
+        // Handle GPU families like NC, ND, NV
+        if (sizePart.Length > 1 && char.IsUpper(sizePart[1]))
+        {
+            if (sizePart.Contains("s_v"))
+                return sizePart.Substring(0, 2) + "sv" + sizePart.Split('_')[1].Substring(1);
+            else if (sizePart.Contains("_v"))
+                return sizePart.Substring(0, 2) + "v" + sizePart.Split('_')[1].Substring(1);
+            else
+                return sizePart.Substring(0, 2);
+        }
+        return "N";
+    }
+    else if (sizePart.Contains("pds_v"))
+        return sizePart.Substring(0, sizePart.IndexOf("pds")) + "pdsv" + sizePart.Split('_')[1].Substring(1); // ARM Dpdsv5
+    else if (sizePart.Contains("ps_v"))
+        return sizePart.Substring(0, sizePart.IndexOf("ps")) + "psv" + sizePart.Split('_')[1].Substring(1); // ARM Dpsv5
+    
+    // Fallback: try to extract the first letter(s) and version
+    var parts = sizePart.Split('_');
+    if (parts.Length > 1 && parts[1].StartsWith("v"))
+        return parts[0].TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9') + parts[1];
+    
+    // Final fallback: return first character
+    return sizePart.Substring(0, 1);
+}
+
+// Helper method to get access token using managed identity
+static async Task<string> GetAccessToken()
+{
+    try
+    {
+        Console.WriteLine("🔐 Getting access token using managed identity...");
+        
+        var credential = new DefaultAzureCredential();
+        var tokenResult = await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "https://management.azure.com/.default" }));
+        
+        Console.WriteLine("✅ Successfully obtained access token using managed identity");
+        return tokenResult.Token;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ Failed to get access token: {ex.Message}");
+        throw;
+    }
 }

@@ -56,6 +56,25 @@
           }
         }
       },
+      "Azure.ResourceManager.Compute/1.6.0": {
+        "type": "package",
+        "dependencies": {
+          "Azure.Core": "1.42.0",
+          "Azure.ResourceManager": "1.12.0",
+          "System.ClientModel": "1.0.0",
+          "System.Text.Json": "4.7.2"
+        },
+        "compile": {
+          "lib/netstandard2.0/Azure.ResourceManager.Compute.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Azure.ResourceManager.Compute.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Azure.Storage.Blobs/12.25.1": {
         "type": "package",
         "dependencies": {
@@ -387,6 +406,22 @@
         "azureicon.png",
         "lib/netstandard2.0/Azure.ResourceManager.dll",
         "lib/netstandard2.0/Azure.ResourceManager.xml"
+      ]
+    },
+    "Azure.ResourceManager.Compute/1.6.0": {
+      "sha512": "6rITWUCsRaHID/dNDJIxsmh0TcOOkr+1H0drFCjYIbd+Zky7HNVCnYZzx+a9y+uXplGRZ21P2RCnjD8Pu3pKug==",
+      "type": "package",
+      "path": "azure.resourcemanager.compute/1.6.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "CHANGELOG.md",
+        "README.md",
+        "azure.resourcemanager.compute.1.6.0.nupkg.sha512",
+        "azure.resourcemanager.compute.nuspec",
+        "azureicon.png",
+        "lib/netstandard2.0/Azure.ResourceManager.Compute.dll",
+        "lib/netstandard2.0/Azure.ResourceManager.Compute.xml"
       ]
     },
     "Azure.Storage.Blobs/12.25.1": {
@@ -880,6 +915,7 @@
     "net9.0": [
       "Azure.Identity >= 1.16.0",
       "Azure.ResourceManager >= 1.13.0",
+      "Azure.ResourceManager.Compute >= 1.6.0",
       "Azure.Storage.Blobs >= 12.25.1"
     ]
   },
@@ -934,6 +970,10 @@
           "Azure.ResourceManager": {
             "target": "Package",
             "version": "[1.13.0, )"
+          },
+          "Azure.ResourceManager.Compute": {
+            "target": "Package",
+            "version": "[1.6.0, )"
           },
           "Azure.Storage.Blobs": {
             "target": "Package",

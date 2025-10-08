@@ -53,6 +53,10 @@
               "target": "Package",
               "version": "[1.13.0, )"
             },
+            "Azure.ResourceManager.Compute": {
+              "target": "Package",
+              "version": "[1.6.0, )"
+            },
             "Azure.Storage.Blobs": {
               "target": "Package",
               "version": "[12.25.1, )"

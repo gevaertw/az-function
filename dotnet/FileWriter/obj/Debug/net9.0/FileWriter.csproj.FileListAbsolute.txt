@@ -31,3 +31,4 @@
 /root/az-function/dotnet/FileWriter/obj/Debug/net9.0/FileWriter.pdb
 /root/az-function/dotnet/FileWriter/obj/Debug/net9.0/FileWriter.genruntimeconfig.cache
 /root/az-function/dotnet/FileWriter/obj/Debug/net9.0/ref/FileWriter.dll
+/root/az-function/dotnet/FileWriter/bin/Debug/net9.0/Azure.ResourceManager.Compute.dll

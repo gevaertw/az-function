@@ -10,6 +10,7 @@
         "dependencies": {
           "Azure.Identity": "1.16.0",
           "Azure.ResourceManager": "1.13.0",
+          "Azure.ResourceManager.Compute": "1.6.0",
           "Azure.Storage.Blobs": "12.25.1"
         },
         "runtime": {
@@ -52,6 +53,20 @@
           "lib/netstandard2.0/Azure.ResourceManager.dll": {
             "assemblyVersion": "1.13.0.0",
             "fileVersion": "1.1300.24.42905"
+          }
+        }
+      },
+      "Azure.ResourceManager.Compute/1.6.0": {
+        "dependencies": {
+          "Azure.Core": "1.47.3",
+          "Azure.ResourceManager": "1.13.0",
+          "System.ClientModel": "1.6.1",
+          "System.Text.Json": "6.0.9"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Azure.ResourceManager.Compute.dll": {
+            "assemblyVersion": "1.6.0.0",
+            "fileVersion": "1.600.24.42603"
           }
         }
       },
@@ -226,6 +241,13 @@
       "sha512": "sha512-B0ZE4gNxs942DScLH53X7L4uqnMnh1LTpjHZUfnToQsjA65AuxiiDCVMQUkTTeQOP3PNd0UOrgRNpjQlbU8bgg==",
       "path": "azure.resourcemanager/1.13.0",
       "hashPath": "azure.resourcemanager.1.13.0.nupkg.sha512"
+    },
+    "Azure.ResourceManager.Compute/1.6.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-6rITWUCsRaHID/dNDJIxsmh0TcOOkr+1H0drFCjYIbd+Zky7HNVCnYZzx+a9y+uXplGRZ21P2RCnjD8Pu3pKug==",
+      "path": "azure.resourcemanager.compute/1.6.0",
+      "hashPath": "azure.resourcemanager.compute.1.6.0.nupkg.sha512"
     },
     "Azure.Storage.Blobs/12.25.1": {
       "type": "package",
