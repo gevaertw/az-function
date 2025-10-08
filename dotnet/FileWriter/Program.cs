@@ -1204,7 +1204,7 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
                         <th>VM SKU</th>
                         <th>Family</th>
                         <th>Size</th>
-                        <th>Key Capabilities</th>
+                        <th>All Capabilities</th>
                         <th>Availability in {targetRegion}</th>
                     </tr>
                 </thead>
@@ -1233,8 +1233,8 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
             availabilityClass = "not-available";
         }
         
-        // Extract key capabilities (vCPUs, Memory, Premium IO)
-        var keyCapabilities = new List<string>();
+        // Extract all capabilities
+        var allCapabilities = new List<string>();
         if (skuDynamic.capabilities != null)
         {
             foreach (var cap in skuDynamic.capabilities)
@@ -1243,16 +1243,15 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
                 var capName = capDynamic.name?.ToString() ?? "";
                 var capValue = capDynamic.value?.ToString() ?? "";
                 
-                if (capName.Contains("vCPUs") || capName.Contains("MemoryGB") || 
-                    capName.Contains("PremiumIO") || capName.Contains("MaxDataDiskCount"))
+                if (!string.IsNullOrEmpty(capName) && !string.IsNullOrEmpty(capValue))
                 {
-                    keyCapabilities.Add($"{capName}: {capValue}");
+                    allCapabilities.Add($"{capName}: {capValue}");
                 }
             }
         }
         
-        var capabilitiesText = keyCapabilities.Any() ? 
-            string.Join(", ", keyCapabilities.Take(3)) : "No key capabilities available";
+        var capabilitiesText = allCapabilities.Any() ? 
+            string.Join(", ", allCapabilities) : "No capabilities available";
         
         vmSkusHtml += $@"
                     <tr data-availability=""{availabilityClass}"">
