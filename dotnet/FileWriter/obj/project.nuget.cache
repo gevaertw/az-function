@@ -1,11 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "l9g3oAcjNzg=",
+  "dgSpecHash": "nYs+K/VVFuU=",
   "success": true,
   "projectFilePath": "/root/az-function/dotnet/FileWriter/FileWriter.csproj",
   "expectedPackageFiles": [
     "/root/.nuget/packages/azure.core/1.47.3/azure.core.1.47.3.nupkg.sha512",
     "/root/.nuget/packages/azure.identity/1.16.0/azure.identity.1.16.0.nupkg.sha512",
+    "/root/.nuget/packages/azure.resourcemanager/1.13.0/azure.resourcemanager.1.13.0.nupkg.sha512",
     "/root/.nuget/packages/azure.storage.blobs/12.25.1/azure.storage.blobs.12.25.1.nupkg.sha512",
     "/root/.nuget/packages/azure.storage.common/12.24.0/azure.storage.common.12.24.0.nupkg.sha512",
     "/root/.nuget/packages/microsoft.bcl.asyncinterfaces/8.0.0/microsoft.bcl.asyncinterfaces.8.0.0.nupkg.sha512",
@@ -19,7 +20,9 @@
     "/root/.nuget/packages/system.io.hashing/8.0.0/system.io.hashing.8.0.0.nupkg.sha512",
     "/root/.nuget/packages/system.memory.data/8.0.1/system.memory.data.8.0.1.nupkg.sha512",
     "/root/.nuget/packages/system.runtime.compilerservices.unsafe/6.0.0/system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512",
-    "/root/.nuget/packages/system.security.cryptography.protecteddata/4.5.0/system.security.cryptography.protecteddata.4.5.0.nupkg.sha512"
+    "/root/.nuget/packages/system.security.cryptography.protecteddata/4.5.0/system.security.cryptography.protecteddata.4.5.0.nupkg.sha512",
+    "/root/.nuget/packages/system.text.encodings.web/6.0.0/system.text.encodings.web.6.0.0.nupkg.sha512",
+    "/root/.nuget/packages/system.text.json/6.0.9/system.text.json.6.0.9.nupkg.sha512"
   ],
   "logs": []
 }
