@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.5.1644",
-      "templateHash": "10901881732907777186"
+      "templateHash": "14508814143880862410"
     }
   },
   "parameters": {
@@ -62,7 +62,8 @@
     "containerAppEnvironmentName": "[format('{0}-{1}-env', variables('resourcePrefix'), parameters('deployName'))]",
     "containerAppName": "[format('{0}-{1}-app', variables('resourcePrefix'), parameters('deployName'))]",
     "managedIdentityName": "[format('{0}-{1}-mi', variables('resourcePrefix'), parameters('deployName'))]",
-    "logAnalyticsWorkspaceName": "[format('{0}-{1}-logs', variables('resourcePrefix'), parameters('deployName'))]"
+    "logAnalyticsWorkspaceName": "[format('{0}-{1}-logs', variables('resourcePrefix'), parameters('deployName'))]",
+    "cronExpression": "[if(lessOrEquals(parameters('scheduleIntervalMinutes'), 5), '0 */5 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 10), '0 */10 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 15), '0 */15 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 30), '0 */30 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 60), '0 0 * * * *', '0 */30 * * * *')))))]"
   },
   "resources": [
     {
@@ -234,7 +235,7 @@
           "triggerType": "Schedule",
           "replicaTimeout": 600,
           "scheduleTriggerConfig": {
-            "cronExpression": "[format('0 */{0} * * * *', parameters('scheduleIntervalMinutes'))]",
+            "cronExpression": "[variables('cronExpression')]",
             "parallelism": 1,
             "replicaCompletionCount": 1
           },
