@@ -636,12 +636,7 @@ static async Task CreateIndexPage(BlobContainerClient containerClient, string ta
                         <span class=""nav-text"">VM SKUs</span>
                     </a>
                 </li>
-                <li class=""nav-item"">
-                    <a href=""{fileName}"" class=""nav-link"" data-page=""json"">
-                        <span class=""nav-icon"">📄</span>
-                        <span class=""nav-text"">Raw JSON</span>
-                    </a>
-                </li>
+
             </ul>
         </div>
     </nav>
@@ -671,14 +666,22 @@ static async Task CreateIndexPage(BlobContainerClient containerClient, string ta
                 </p>
             </a>
 
-            <a href=""{fileName}"" class=""feature-card"">
+            <div class=""feature-card"">
                 <span class=""feature-icon"">📄</span>
                 <h2 class=""feature-title"">Raw JSON Data</h2>
                 <p class=""feature-description"">
-                    Access the complete dataset in JSON format for programmatic consumption and integration 
+                    Access the complete datasets in JSON format for programmatic consumption and integration 
                     with your own applications and tools.
                 </p>
-            </a>
+                <div style=""margin-top: 15px;"">
+                    <a href=""resource-providers.json"" style=""color: #0078d4; text-decoration: none; margin-right: 20px; display: inline-block; font-weight: 500;"">
+                        📦 Resource Providers JSON
+                    </a>
+                    <a href=""vm-skus.json"" style=""color: #0078d4; text-decoration: none; display: inline-block; font-weight: 500;"">
+                        💻 VM SKUs JSON
+                    </a>
+                </div>
+            </div>
 
             <div class=""feature-card"">
                 <span class=""feature-icon"">📊</span>
@@ -805,12 +808,7 @@ static async Task CreateResourcesPage(BlobContainerClient containerClient, strin
                         <span class=""nav-text"">VM SKUs</span>
                     </a>
                 </li>
-                <li class=""nav-item"">
-                    <a href=""resource-providers.json"" class=""nav-link"" data-page=""json"">
-                        <span class=""nav-icon"">📄</span>
-                        <span class=""nav-text"">Raw JSON</span>
-                    </a>
-                </li>
+
             </ul>
         </div>
     </nav>
@@ -1207,12 +1205,7 @@ static async Task CreateVmSkusPage(BlobContainerClient containerClient, string t
                         <span class=""nav-text"">VM SKUs</span>
                     </a>
                 </li>
-                <li class=""nav-item"">
-                    <a href=""vm-skus.json"" class=""nav-link"" data-page=""json"">
-                        <span class=""nav-icon"">📄</span>
-                        <span class=""nav-text"">VM SKUs JSON</span>
-                    </a>
-                </li>
+
             </ul>
         </div>
     </nav>
