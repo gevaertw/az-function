@@ -20,6 +20,9 @@ param storageAccountSku string = 'Standard_LRS'
 @description('Container image to deploy')
 param containerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('Schedule interval in minutes for the container app job')
+param scheduleIntervalMinutes int = 30
+
 // Variables for resource naming
 var resourcePrefix = '${namePrefix}-${environment}'
 var storageAccountName = replace('${resourcePrefix}${deployName}sa', '-', '')
@@ -176,8 +179,8 @@ resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' 
   }
 }
 
-// Container App
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+// Container App Job (Scheduled)
+resource containerAppJob 'Microsoft.App/jobs@2024-03-01' = {
   name: containerAppName
   location: location
   identity: {
@@ -187,12 +190,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
   properties: {
-    managedEnvironmentId: containerAppEnvironment.id
+    environmentId: containerAppEnvironment.id
     configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: false
-        targetPort: 80
+      triggerType: 'Schedule'
+      replicaTimeout: 600 // 10 minutes timeout
+      scheduleTriggerConfig: {
+        cronExpression: '0 */${scheduleIntervalMinutes} * * * *' // Every X minutes
+        parallelism: 1
+        replicaCompletionCount: 1
       }
       registries: [
         {
@@ -230,10 +235,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
         }
       ]
-      scale: {
-        minReplicas: 0
-        maxReplicas: 1
-      }
     }
   }
   dependsOn: [
@@ -248,8 +249,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 @description('Storage Account name')
 output storageAccountName string = storageAccount.name
 
-@description('Container App name') 
-output containerAppName string = containerApp.name
+@description('Container App Job name') 
+output containerAppName string = containerAppJob.name
 
 @description('Container App Environment name')
 output containerAppEnvironmentName string = containerAppEnvironment.name

@@ -3,10 +3,10 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "deployName": {
-            "value": "filewriter"
+            "value": "abcchecker"
         },
         "namePrefix": {
-            "value": "ffw"
+            "value": "abcc"
         },
         "location": {
             "value": "germanywestcentral"
@@ -15,7 +15,7 @@
             "value": "dev"
         },
         "rgname": {
-            "value": "dev-filewriter-rg"
+            "value": "dev-abcchecker-rg"
         },
         "functionAppSku": {
             "value": "Y1"
@@ -24,7 +24,10 @@
             "value": "Standard_LRS"
         },
         "containerImage": {
-            "value": "ffw-dev-filewriter-acr.azurecr.io/filewriter:latest"
+            "value": "ffw-dev-abcchecker-acr.azurecr.io/filewriter:latest"
+        },
+        "scheduleIntervalMinutes": {
+            "value": 30
         }
     }
 }
