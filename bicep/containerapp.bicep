@@ -31,13 +31,13 @@ var containerAppName = '${resourcePrefix}-${deployName}-app'
 var managedIdentityName = '${resourcePrefix}-${deployName}-mi'
 var logAnalyticsWorkspaceName = '${resourcePrefix}-${deployName}-logs'
 
-// Generate cron expression based on schedule interval
-var cronExpression = scheduleIntervalMinutes <= 5 ? '0 */5 * * * *'   // Every 5 minutes (minimum)
-                   : scheduleIntervalMinutes <= 10 ? '0 */10 * * * *'  // Every 10 minutes
-                   : scheduleIntervalMinutes <= 15 ? '0 */15 * * * *'  // Every 15 minutes
-                   : scheduleIntervalMinutes <= 30 ? '0 */30 * * * *'  // Every 30 minutes
-                   : scheduleIntervalMinutes <= 60 ? '0 0 * * * *'     // Every hour
-                   : '0 */30 * * * *'                                  // Default to 30 minutes
+// Generate cron expression based on schedule interval (5-field format for Azure Container Apps)
+var cronExpression = scheduleIntervalMinutes <= 5 ? '*/5 * * * *'     // Every 5 minutes (minimum)
+                   : scheduleIntervalMinutes <= 10 ? '*/10 * * * *'    // Every 10 minutes
+                   : scheduleIntervalMinutes <= 15 ? '*/15 * * * *'    // Every 15 minutes
+                   : scheduleIntervalMinutes <= 30 ? '*/30 * * * *'    // Every 30 minutes
+                   : scheduleIntervalMinutes <= 60 ? '0 * * * *'       // Every hour
+                   : '*/30 * * * *'                                    // Default to 30 minutes
 
 // Log Analytics Workspace for Container App Environment
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {

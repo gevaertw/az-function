@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.38.5.1644",
-      "templateHash": "14508814143880862410"
+      "templateHash": "2948064614431884574"
     }
   },
   "parameters": {
@@ -63,7 +63,7 @@
     "containerAppName": "[format('{0}-{1}-app', variables('resourcePrefix'), parameters('deployName'))]",
     "managedIdentityName": "[format('{0}-{1}-mi', variables('resourcePrefix'), parameters('deployName'))]",
     "logAnalyticsWorkspaceName": "[format('{0}-{1}-logs', variables('resourcePrefix'), parameters('deployName'))]",
-    "cronExpression": "[if(lessOrEquals(parameters('scheduleIntervalMinutes'), 5), '0 */5 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 10), '0 */10 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 15), '0 */15 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 30), '0 */30 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 60), '0 0 * * * *', '0 */30 * * * *')))))]"
+    "cronExpression": "[if(lessOrEquals(parameters('scheduleIntervalMinutes'), 5), '*/5 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 10), '*/10 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 15), '*/15 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 30), '*/30 * * * *', if(lessOrEquals(parameters('scheduleIntervalMinutes'), 60), '0 * * * *', '*/30 * * * *')))))]"
   },
   "resources": [
     {
