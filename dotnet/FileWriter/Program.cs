@@ -69,9 +69,8 @@ try
         
         await foreach (var provider in resourceProviders)
         {
-            // Skip if provider is not registered
-            if (provider.Data.RegistrationState != "Registered")
-                continue;
+            // Include ALL providers regardless of registration state
+            // This gives the complete picture like the Azure Management API
 
             var resourceTypes = new List<object>();
             var hasResourcesInRegion = false;
